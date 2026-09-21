@@ -3,17 +3,15 @@ from __future__ import annotations
 from fpdf import FPDF
 from models import (
     FONT_DIR, CITY,
-    SELLER_NAME, SELLER_ADDRESS, SELLER_POSTAL, SELLER_NIP,
-    BUYER_NAME, BUYER_ADDRESS, BUYER_POSTAL, BUYER_NIP,
     BANK_NAME, ACCOUNT_PLN, ACCOUNT_EUR,
     SERVICE_NAME, UNIT_NAME,
     INVOICE_FOOTER_NUM, INVOICE_FOOTER_SHIP,
-    Z_RECIPIENT, Z_RECIPIENT_ADDR, Z_SENDER, Z_SENDER_ADDR, Z_PERSON,
+    Z_PERSON,
     Z_TRUCK, Z_TRAILER, Z_DRIVER, Z_DRIVER_PHONE, Z_CARRIAGE, Z_ID_DOC,
     Z_LOAD_DATE, Z_LOAD_COMPANY, Z_LOAD_ADDR, Z_LOAD_GOODS, Z_LOAD_PALLET, Z_LOAD_ADR,
     Z_UNLOAD_DATE, Z_UNLOAD_COMPANY, Z_UNLOAD_ADDR, Z_UNLOAD_GOODS, Z_UNLOAD_PALLET, Z_UNLOAD_ADR,
     Z_ADDRESS_CORRESP, Z_PAYMENT_TERM_TEXT, Z_FREIGHT,
-    fmt_pln, invoice_currency, invoice_number,
+    fmt_pln, invoice_currency, generate_random_id, ksef_invoice_number
 )
 
 FONT = "DejaVu"
@@ -51,7 +49,10 @@ def generate_invoice(data, path: str) -> str:
     pdf.alias_nb_pages()
     pdf.add_page()
     d = data.date
-    number = invoice_number(d, data.combotype)
+    ksef_date = ksef_invoice_number(d)
+    number = data.number
+    random_ksef_id = generate_random_id()
+    ksef_number = f"{data.seller_nip_stripped}-{ksef_date}-{random_ksef_id}"
     deadline = data.deadline
     currency = data.currency
 
@@ -64,7 +65,8 @@ def generate_invoice(data, path: str) -> str:
     _text(pdf, 30, 75, "FAKTURA TESTOWA", style="", size=22)
     
     # Centered Invoice Number
-    _text(pdf, 0, 100, f"FAKTURA VAT NR {number}", style="B", size=14, align="C")
+    _text(pdf, 0, 100, f"FAKTURA VAT NR: {number}", style="B", size=14, align="C")
+    _text(pdf, 0, 116, f"Numer KSEF: {ksef_number}", size=10, align="C")
 
     # Sprzedawca / Nabywca Table
     pdf.rect(30, 125, 267.5, 15)   
@@ -75,13 +77,13 @@ def generate_invoice(data, path: str) -> str:
     _text(pdf, 35, 135, "Sprzedawca:", style="B", size=9)
     _text(pdf, 302.5, 135, "Nabywca:", style="B", size=9)
 
-    _text(pdf, 35, 152, SELLER_NAME, style="B", size=9)
-    _text(pdf, 35, 166, f"Adres: {SELLER_POSTAL} {CITY}, {SELLER_ADDRESS}", size=8.5)
-    _text(pdf, 35, 180, "NIP:", size=8.5)
+    _text(pdf, 35, 152, data.seller_name, style="B", size=9)
+    _text(pdf, 35, 166, f"Adres: {data.seller_address}, {data.seller_postal}", size=8.5)
+    _text(pdf, 35, 180, f"NIP: {data.seller_nip}", size=8.5)
 
-    _text(pdf, 302.5, 152, BUYER_NAME, style="B", size=9)
-    _text(pdf, 302.5, 166, f"Adres: {BUYER_POSTAL} {CITY}, {BUYER_ADDRESS}", size=8.5)
-    _text(pdf, 302.5, 180, f"NIP: {BUYER_NIP}", size=8.5)
+    _text(pdf, 302.5, 152, data.buyer_name, style="B", size=9)
+    _text(pdf, 302.5, 166, f"Adres: {data.buyer_address}, {data.buyer_postal}", size=8.5)
+    _text(pdf, 302.5, 180, f"NIP: {data.buyer_nip}", size=8.5)
 
     # Detail rows
     _detail(pdf, 210, "Data dostawy towaru / wykonania usługi:", data.date_iso)
@@ -180,7 +182,7 @@ def generate_order(data, path: str) -> str:
     pdf.alias_nb_pages()
     pdf.add_page()
     d = data.date
-    number = invoice_number(d, data.combotype)
+    number = data.number
 
     # City and Date
     pdf.set_xy(30, 30)
@@ -201,16 +203,16 @@ def generate_order(data, path: str) -> str:
     # Row 2 (Company Details)
     pdf.rect(x_left, 65, w_box, 45)
     pdf.rect(x_right, 65, w_box, 45)
-    
-    _text(pdf, x_left + 5, 75, Z_RECIPIENT, style="B", size=8)
-    _text(pdf, x_left + 5, 87, Z_RECIPIENT_ADDR, size=8)
-    _text(pdf, x_left + 5, 99, "NIP: ", size=8)
-    _text(pdf, x_left + 120, 99, "VAT Eu:", size=8)
 
-    _text(pdf, x_right + 5, 75, Z_SENDER, style="B", size=8)
-    _text(pdf, x_right + 5, 87, Z_SENDER_ADDR, size=8)
-    _text(pdf, x_right + 5, 99, f"NIP: {BUYER_NIP}", size=8)
-    _text(pdf, x_right + 120, 99, f"VAT Eu: {BUYER_NIP}", size=8)
+    _text(pdf, x_left + 5, 75, data.order_seller_name, style="B", size=8)
+    _text(pdf, x_left + 5, 87, f"{data.seller_address}, {data.order_seller_postal}", size=8)
+    _text(pdf, x_left + 5, 99, f"NIP: {data.seller_nip_stripped}", size=8)
+    _text(pdf, x_left + 120, 99, f"VAT Eu: {data.seller_nip}", size=8)
+
+    _text(pdf, x_right + 5, 75, data.order_buyer_name, style="B", size=8)
+    _text(pdf, x_right + 5, 87, f"{data.buyer_address}, {data.order_buyer_postal}", size=8)
+    _text(pdf, x_right + 5, 99, f"NIP: {data.buyer_nip_stripped}", size=8)
+    _text(pdf, x_right + 120, 99, f"VAT Eu: {data.buyer_nip}", size=8)
 
     # Row 3 (Employee Name)
     pdf.rect(x_left, 110, w_box, 15)

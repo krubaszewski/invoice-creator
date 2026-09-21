@@ -5,8 +5,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import FreeSimpleGUI as sg
+from FreeSimpleGUI import main, window
 from models import (
     PAYMENT_TERMS, INVOICE_TYPES, CURRENCIES,
+    SELLER_NAME, SELLER_ADDRESS, SELLER_POSTAL, SELLER_NIP,
+    BUYER_NAME, BUYER_ADDRESS, BUYER_POSTAL, BUYER_NIP, CITY, Z_RECIPIENT, Z_RECIPIENT_ADDR, Z_SENDER, Z_SENDER_ADDR,
     InvoiceData, parse_days, fmt_pln, SETTINGS_FILE, PROJECT_DIR,
 )
 from pdf import generate_invoice, generate_order
@@ -31,7 +34,8 @@ def _save_last_folder(path: str) -> None:
 
 def build_layout() -> list:
     last_folder = _load_last_folder()
-    return [
+
+    main_screen = [
         [sg.Text("Date (yyyy-mm-dd):"), sg.Input(key="-IN-", default_text=_today_iso(), size=(14, 1), enable_events=True),
          sg.CalendarButton("📅", target="-IN-", format="%Y-%m-%d", close_when_date_chosen=True)],
         [sg.Frame("VAT calculation (23 %)", [
@@ -48,6 +52,72 @@ def build_layout() -> list:
         [sg.Button("Generate", key="-GENERATE-", button_color=("white", "green")), sg.Button("Quit", key="-QUIT-")],
         [sg.Multiline(size=(90, 13), key="-OUTPUT-", disabled=True, autoscroll=True, text_color="green")],
     ]
+
+    common_seller_column = [
+        [sg.Frame("Sprzedawca", [
+            [sg.Input(key="-SELLER_ADDRESS-", default_text=SELLER_ADDRESS, size=(36, 1), enable_events=True)],
+            [sg.Text("NIP"), sg.Input(key="-SELLER_NIP-", default_text=SELLER_NIP, size=(37, 1), enable_events=True)],
+        ])],
+    ]
+
+    common_buyer_column = [
+        [sg.Frame("Nabywca", [
+            [sg.Input(key="-BUYER_ADDRESS-", default_text=BUYER_ADDRESS, size=(36, 1), enable_events=True)],
+            [sg.Text("NIP"), sg.Input(key="-BUYER_NIP-", default_text=BUYER_NIP, size=(37, 1), enable_events=True)],
+        ])],
+    ]
+
+    invoice_seller_column = [
+        [sg.Frame("Sprzedawca", [
+            [sg.Input(key="-SELLER_NAME-", default_text=SELLER_NAME, size=(37, 1), enable_events=True)],
+            [sg.Input(key="-SELLER_POSTAL-", default_text=f"{SELLER_POSTAL} {CITY}", size=(37, 1), enable_events=True)],
+        ])],
+    ]
+    
+    invoice_buyer_column = [
+        [sg.Frame("Nabywca", [
+            [sg.Input(key="-BUYER_NAME-", default_text=BUYER_NAME, size=(41, 1), enable_events=True)],
+            [sg.Input(key="-BUYER_POSTAL-", default_text=f"{BUYER_POSTAL} {CITY}", size=(41, 1), enable_events=True)],
+        ])],
+    ]
+
+    order_seller_column = [
+        [sg.Frame("Sprzedawca", [
+            [sg.Input(key="-ORDER_SELLER_NAME-", default_text=Z_RECIPIENT, size=(34, 1), enable_events=True)],
+            [sg.Text("Postal"), sg.Input(key="-ORDER_SELLER_POSTAL-", default_text=f"{Z_RECIPIENT_ADDR}", size=(34, 1), enable_events=True)],
+        ])],
+    ]
+    
+    order_buyer_column = [
+        [sg.Frame("Nabywca", [
+            [sg.Input(key="-ORDER_BUYER_NAME-", default_text=Z_SENDER, size=(38, 1), enable_events=True)],
+            [sg.Text("Postal"), sg.Input(key="-ORDER_BUYER_POSTAL-", default_text=f"{Z_SENDER_ADDR}", size=(38, 1), enable_events=True)],
+        ])],
+    ]
+
+    business_partners = [sg.Col(invoice_seller_column, p=0), sg.Col(invoice_buyer_column, p=0)]
+    order_partners = [sg.Col(order_seller_column, p=0), sg.Col(order_buyer_column, p=0)]
+    common_business_partners = [sg.Col(common_seller_column, p=0), sg.Col(common_buyer_column, p=0)]
+
+    invoice_frame = [sg.Frame("Invoice Details", [
+                business_partners
+            ], font=("Helvetica", 13))]
+
+    order_frame = [sg.Frame("Order Details", [
+                order_partners
+            ], font=("Helvetica", 13))]
+
+    common_frame = [sg.Frame("Common", [
+                common_business_partners
+            ], font=("Helvetica", 13))]
+
+    business_partners_tab = [ common_frame, invoice_frame, order_frame ]
+
+    main_layout = [[sg.TabGroup([[  sg.Tab('Main Details', main_screen),
+                               sg.Tab('Business Partners', business_partners_tab)]])]]
+                               
+    main_layout[-1].append(sg.Sizegrip())
+    return main_layout
 
 
 def _unique_path(path: Path) -> Path:
@@ -84,9 +154,32 @@ class App:
             self._recalc(values)
         self.window.close()
 
+    _PARTNER_KEYS = (
+        "-SELLER_NAME-", "-SELLER_ADDRESS-", "-SELLER_POSTAL-", "-SELLER_NIP-",
+        "-BUYER_NAME-", "-BUYER_ADDRESS-", "-BUYER_POSTAL-", "-BUYER_NIP-",
+        "-ORDER_SELLER_NAME-", "-ORDER_SELLER_POSTAL-",
+        "-ORDER_BUYER_NAME-", "-ORDER_BUYER_POSTAL-",
+    )
+
+    def _partner_kwargs(self, values: dict) -> dict:
+        return {
+            "seller_name": values.get("-SELLER_NAME-") or SELLER_NAME,
+            "seller_address": values.get("-SELLER_ADDRESS-") or SELLER_ADDRESS,
+            "seller_postal": values.get("-SELLER_POSTAL-") or f"{SELLER_POSTAL} {CITY}",
+            "seller_nip": values.get("-SELLER_NIP-") or SELLER_NIP,
+            "buyer_name": values.get("-BUYER_NAME-") or BUYER_NAME,
+            "buyer_address": values.get("-BUYER_ADDRESS-") or BUYER_ADDRESS,
+            "buyer_postal": values.get("-BUYER_POSTAL-") or f"{BUYER_POSTAL} {CITY}",
+            "buyer_nip": values.get("-BUYER_NIP-") or BUYER_NIP,
+            "order_seller_name": values.get("-ORDER_SELLER_NAME-") or Z_RECIPIENT,
+            "order_seller_postal": values.get("-ORDER_SELLER_POSTAL-") or Z_RECIPIENT_ADDR,
+            "order_buyer_name": values.get("-ORDER_BUYER_NAME-") or Z_SENDER,
+            "order_buyer_postal": values.get("-ORDER_BUYER_POSTAL-") or Z_SENDER_ADDR,
+        }
+
     def _recalc(self, values: dict | None = None) -> None:
         if values is None:
-            values = {k: self.window[k].get() for k in ("-IN-", "-COMBO-", "-COMBOTYPE-", "-CURRENCY-", "-GROSS-")}
+            values = {k: self.window[k].get() for k in ("-IN-", "-COMBO-", "-COMBOTYPE-", "-CURRENCY-", "-GROSS-") + self._PARTNER_KEYS}
         gross_raw = values.get("-GROSS-", "") or ""
         if gross_raw.strip():
             try:
@@ -103,7 +196,7 @@ class App:
         days_label = values.get("-COMBO-") or ""
         days = parse_days(days_label) if days_label else 0
         currency = values.get("-CURRENCY-") or "PLN"
-        data = InvoiceData(date=d, combotype="MIKRO", days=days, currency=currency, gross=gross or Decimal("0"))
+        data = InvoiceData(date=d, combotype="MIKRO", days=days, currency=currency, gross=gross or Decimal("0"), **self._partner_kwargs(values))
         if gross is None:
             self.window["-NETTO-"].update("")
             self.window["-VAT-"].update("")
@@ -147,7 +240,7 @@ class App:
             self.window["-OUTPUT-"].update("ERROR: amount must be positive.")
             return
 
-        data = InvoiceData(date=d, combotype=combotype, days=days, currency=currency, gross=gross)
+        data = InvoiceData(date=d, combotype=combotype, days=days, currency=currency, gross=gross, **self._partner_kwargs(values))
         folder = Path(values.get("-FOLDER-") or str(PROJECT_DIR))
         folder.mkdir(parents=True, exist_ok=True)
 

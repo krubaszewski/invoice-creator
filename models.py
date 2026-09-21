@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
-from datetime import date, timedelta
+import random
+import re
+import string
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
@@ -10,12 +13,12 @@ CITY = "Wrocław"
 
 SELLER_NAME = "TEST PANELU TCK"
 SELLER_ADDRESS = "ul. Racławicka 4"
-SELLER_POSTAL = "50-540 Wrocław"
-SELLER_NIP = ""
+SELLER_POSTAL = "50-540"
+SELLER_NIP = "PL1233254123"
 
 BUYER_NAME = "KKT PAULINA BILSKA-MAREK"
 BUYER_ADDRESS = "ul. Geodezyjna 21"
-BUYER_POSTAL = "51-180 Wrocław"
+BUYER_POSTAL = "51-180"
 BUYER_NIP = "PL8981919102"
 
 BANK_NAME = "ING Bank Śląski"
@@ -30,9 +33,9 @@ INVOICE_FOOTER_SHIP = "Załadunek: FR 62330 Isbergues(2024-07-30)  Rozładunek: 
 
 # ZLECENIE
 Z_RECIPIENT = "TC SOFT"
-Z_RECIPIENT_ADDR = "ul. Racławicka 4, PL50540 Wrocław, PL"
+Z_RECIPIENT_ADDR = "PL50540 Wrocław"
 Z_SENDER = "KKT PAULINA BILSKA-MAREK"
-Z_SENDER_ADDR = "ul. Geodezyjna 21, PL51180 Wrocław"
+Z_SENDER_ADDR = "PL51180 Wrocław"
 Z_PERSON = "Test Testerowy"
 
 Z_TRUCK = "SB2224L"
@@ -44,14 +47,14 @@ Z_ID_DOC = "ATM 670198"
 
 Z_LOAD_DATE = "27.11.2019"
 Z_LOAD_COMPANY = "ZBYSZKO Bojanowicz Sp. z o.o."
-Z_LOAD_ADDR = "ul. Kościelna 85 A, PL26800 Białobrzegi, PL"
+Z_LOAD_ADDR = "ul. Kościelna 85 A, PL26800 Białobrzegi"
 Z_LOAD_GOODS = "7 miejsc paletowych 120x100x255"
 Z_LOAD_PALLET = "7 x Miejsce paletowe"
 Z_LOAD_ADR = "Nie"
 
 Z_UNLOAD_DATE = "28.11.2019"
 Z_UNLOAD_COMPANY = "Plastipak"
-Z_UNLOAD_ADDR = "ul. Turyńska 80, PL43100 Tychy, PL"
+Z_UNLOAD_ADDR = "ul. Turyńska 80, PL43100 Tychy"
 Z_UNLOAD_GOODS = "7 miejsc paletowych 120x100x255"
 Z_UNLOAD_PALLET = "7 x Miejsce paletowe"
 Z_UNLOAD_ADR = "Nie"
@@ -102,12 +105,18 @@ def fmt_pln(value: Decimal) -> str:
     return f"{int_part},{dec_part}"
 
 
-def invoice_number(d: date, combotype: str) -> str:
-    return f"{d.day:02d}_{d.month:02d}_{d.year % 100:02d}_{combotype}"
+def invoice_number(d: date, combotype: str, seq: str = "") -> str:
+    base = f"{d.day:02d}_{d.month:02d}_{d.year % 100:02d}"
+    if seq:
+        base = f"{base}_{seq}"
+    return f"{base}_{combotype}"
 
 
-def invoice_filename(d: date, combotype: str) -> str:
-    return f"{d.day:02d}{d.month:02d}{d.year}_{combotype}"
+def invoice_filename(d: date, combotype: str, seq: str = "") -> str:
+    base = f"{d.day:02d}{d.month:02d}{d.year}"
+    if seq:
+        base = f"{base}_{seq}"
+    return f"{base}_{combotype}"
 
 
 def payment_deadline(d: date, days: int) -> date:
@@ -122,6 +131,24 @@ def invoice_currency(vatLabel: str, currency: str) -> str:
     """Return the vabel like 'VAT PLN' or 'VAT EUR' based on the currency."""
     return f"{vatLabel} {currency}"
 
+def generate_random_id():
+    part1_chars = string.ascii_uppercase + string.digits
+    part1 = ''.join(random.choices(part1_chars, k=12))
+
+    part2 = ''.join(random.choices(string.digits, k=2))
+    
+    return f"{part1}-{part2}"
+
+def ksef_invoice_number(d: date) -> str:
+    return f"{d.year:04d}{d.month:02d}{d.day:02d}"
+
+
+def strip_country_code(nip: str) -> str:
+    """Strip a leading 2-3 letter country code (e.g. 'PL', 'DE') from a NIP/VAT number."""
+    nip = (nip or "").strip()
+    return re.sub(r"^[A-Za-z]{2,3}(?=\d)", "", nip)
+
+
 @dataclass
 class InvoiceData:
     date: date
@@ -129,9 +156,23 @@ class InvoiceData:
     days: int
     currency: str
     gross: Decimal
+    seller_name: str = SELLER_NAME
+    seller_address: str = SELLER_ADDRESS
+    seller_postal: str = SELLER_POSTAL
+    seller_nip: str = SELLER_NIP
+    buyer_name: str = BUYER_NAME
+    buyer_address: str = BUYER_ADDRESS
+    buyer_postal: str = BUYER_POSTAL
+    buyer_nip: str = BUYER_NIP
+    order_seller_name: str = Z_RECIPIENT
+    order_seller_postal: str = Z_RECIPIENT_ADDR
+    order_buyer_name: str = Z_SENDER
+    order_buyer_postal: str = Z_SENDER_ADDR
     netto: Decimal = None
     vat: Decimal = None
     brutto: Decimal = None
+    created_at: datetime = field(default_factory=datetime.now)
+
 
     def __post_init__(self) -> None:
         n, v, b = calc_vat(self.gross)
@@ -140,12 +181,26 @@ class InvoiceData:
         self.brutto = b
 
     @property
+    def seller_nip_stripped(self) -> str:
+        return strip_country_code(self.seller_nip)
+
+    @property
+    def buyer_nip_stripped(self) -> str:
+        return strip_country_code(self.buyer_nip)
+
+    @property
+    def sequence(self) -> str:
+        """Creation-time-based suffix (HHMMSS) so multiple invoices generated
+        on the same day can still be distinguished and ordered."""
+        return self.created_at.strftime("%H%M%S")
+
+    @property
     def number(self) -> str:
-        return invoice_number(self.date, self.combotype)
+        return invoice_number(self.date, self.combotype, self.sequence)
 
     @property
     def filename(self) -> str:
-        return invoice_filename(self.date, self.combotype)
+        return invoice_filename(self.date, self.combotype, self.sequence)
 
     @property
     def deadline(self) -> date:
