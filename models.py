@@ -84,6 +84,7 @@ CURRENCIES = ["PLN", "EUR", "RON"]
 SETTINGS_DIR = Path.home() / ".invoice_creator"
 SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
 SETTINGS_FILE = SETTINGS_DIR / ".last_folder"
+DEFAULT_PARTNERS_FILE = SETTINGS_DIR / ".default_partners"
 
 FONT_DIR = _app_dir() / "resources" / "fonts"
 PROJECT_DIR = _app_dir()

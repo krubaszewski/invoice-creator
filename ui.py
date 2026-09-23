@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from turtle import st
 
 import FreeSimpleGUI as sg
 from FreeSimpleGUI import main, window
 from models import (
-    PAYMENT_TERMS, INVOICE_TYPES, CURRENCIES,
+    DEFAULT_PARTNERS_FILE, PAYMENT_TERMS, INVOICE_TYPES, CURRENCIES,
     SELLER_NAME, SELLER_ADDRESS, SELLER_POSTAL, SELLER_NIP,
     BUYER_NAME, BUYER_ADDRESS, BUYER_POSTAL, BUYER_NIP, CITY, Z_RECIPIENT, Z_RECIPIENT_ADDR, Z_SENDER, Z_SENDER_ADDR,
     InvoiceData, parse_days, fmt_pln, SETTINGS_FILE, PROJECT_DIR,
@@ -16,6 +18,7 @@ from pdf import generate_invoice, generate_order
 
 WINDOW_TITLE = "Invoice and Transport order generator"
 _LAST_FOLDER_FILE = SETTINGS_FILE
+_LAST_DEFAULT_PARTNERS_FILE = DEFAULT_PARTNERS_FILE
 
 def _today_iso() -> str:
     return datetime.date.today().isoformat()
@@ -32,6 +35,22 @@ def _save_last_folder(path: str) -> None:
     except Exception:
         pass
 
+def _save_default_partners(values: dict) -> None:
+    try:
+        _LAST_DEFAULT_PARTNERS_FILE.write_text(json.dumps(values))
+    except Exception:
+        pass
+
+def _load_default_partners(field: str, default: str = "") -> str:
+    try:
+        data = json.loads(_LAST_DEFAULT_PARTNERS_FILE.read_text())
+        for ref, value in data.items():
+            if ref == field:
+                return value
+    except Exception:
+        pass
+    return default
+    
 def build_layout() -> list:
     last_folder = _load_last_folder()
 
@@ -55,49 +74,50 @@ def build_layout() -> list:
 
     common_seller_column = [
         [sg.Frame("Sprzedawca", [
-            [sg.Input(key="-SELLER_ADDRESS-", default_text=SELLER_ADDRESS, size=(36, 1), enable_events=True)],
-            [sg.Text("NIP"), sg.Input(key="-SELLER_NIP-", default_text=SELLER_NIP, size=(37, 1), enable_events=True)],
+            [sg.Input(key="-SELLER_ADDRESS-", default_text=_load_default_partners("-SELLER_ADDRESS-", default=SELLER_ADDRESS), size=(36, 1), enable_events=True)],
+            [sg.Text("NIP"), sg.Input(key="-SELLER_NIP-", default_text=_load_default_partners("-SELLER_NIP-", default=SELLER_NIP), size=(37, 1), enable_events=True)],
         ])],
     ]
 
     common_buyer_column = [
         [sg.Frame("Nabywca", [
-            [sg.Input(key="-BUYER_ADDRESS-", default_text=BUYER_ADDRESS, size=(36, 1), enable_events=True)],
-            [sg.Text("NIP"), sg.Input(key="-BUYER_NIP-", default_text=BUYER_NIP, size=(37, 1), enable_events=True)],
+            [sg.Input(key="-BUYER_ADDRESS-", default_text=_load_default_partners("-BUYER_ADDRESS-", default=BUYER_ADDRESS), size=(36, 1), enable_events=True)],
+            [sg.Text("NIP"), sg.Input(key="-BUYER_NIP-", default_text=_load_default_partners("-BUYER_NIP-", default=BUYER_NIP), size=(37, 1), enable_events=True)],
         ])],
     ]
 
     invoice_seller_column = [
         [sg.Frame("Sprzedawca", [
-            [sg.Input(key="-SELLER_NAME-", default_text=SELLER_NAME, size=(37, 1), enable_events=True)],
-            [sg.Input(key="-SELLER_POSTAL-", default_text=f"{SELLER_POSTAL} {CITY}", size=(37, 1), enable_events=True)],
+            [sg.Input(key="-SELLER_NAME-", default_text=_load_default_partners("-SELLER_NAME-", default=SELLER_NAME), size=(37, 1), enable_events=True)],
+            [sg.Input(key="-SELLER_POSTAL-", default_text=_load_default_partners("-SELLER_POSTAL-", default=f"{SELLER_POSTAL} {CITY}"), size=(37, 1), enable_events=True)],
         ])],
     ]
     
     invoice_buyer_column = [
         [sg.Frame("Nabywca", [
-            [sg.Input(key="-BUYER_NAME-", default_text=BUYER_NAME, size=(41, 1), enable_events=True)],
-            [sg.Input(key="-BUYER_POSTAL-", default_text=f"{BUYER_POSTAL} {CITY}", size=(41, 1), enable_events=True)],
+            [sg.Input(key="-BUYER_NAME-", default_text=_load_default_partners("-BUYER_NAME-", default=BUYER_NAME), size=(41, 1), enable_events=True)],
+            [sg.Input(key="-BUYER_POSTAL-", default_text=_load_default_partners("-BUYER_POSTAL-", default=f"{BUYER_POSTAL} {CITY}"), size=(41, 1), enable_events=True)],
         ])],
     ]
 
     order_seller_column = [
         [sg.Frame("Sprzedawca", [
-            [sg.Input(key="-ORDER_SELLER_NAME-", default_text=Z_RECIPIENT, size=(34, 1), enable_events=True)],
-            [sg.Text("Postal"), sg.Input(key="-ORDER_SELLER_POSTAL-", default_text=f"{Z_RECIPIENT_ADDR}", size=(34, 1), enable_events=True)],
+            [sg.Input(key="-ORDER_SELLER_NAME-", default_text=_load_default_partners("-ORDER_SELLER_NAME-", default=Z_RECIPIENT), size=(34, 1), enable_events=True)],
+            [sg.Text("Postal"), sg.Input(key="-ORDER_SELLER_POSTAL-", default_text=_load_default_partners("-ORDER_SELLER_POSTAL-", default=f"{Z_RECIPIENT_ADDR}"), size=(34, 1), enable_events=True)],
         ])],
     ]
     
     order_buyer_column = [
         [sg.Frame("Nabywca", [
-            [sg.Input(key="-ORDER_BUYER_NAME-", default_text=Z_SENDER, size=(38, 1), enable_events=True)],
-            [sg.Text("Postal"), sg.Input(key="-ORDER_BUYER_POSTAL-", default_text=f"{Z_SENDER_ADDR}", size=(38, 1), enable_events=True)],
+            [sg.Input(key="-ORDER_BUYER_NAME-", default_text=_load_default_partners("-ORDER_BUYER_NAME-", default=Z_SENDER), size=(38, 1), enable_events=True)],
+            [sg.Text("Postal"), sg.Input(key="-ORDER_BUYER_POSTAL-", default_text=_load_default_partners("-ORDER_BUYER_POSTAL-", default=f"{Z_SENDER_ADDR}"), size=(38, 1), enable_events=True)],
         ])],
     ]
 
     business_partners = [sg.Col(invoice_seller_column, p=0), sg.Col(invoice_buyer_column, p=0)]
     order_partners = [sg.Col(order_seller_column, p=0), sg.Col(order_buyer_column, p=0)]
     common_business_partners = [sg.Col(common_seller_column, p=0), sg.Col(common_buyer_column, p=0)]
+    save_default_partners = [sg.Button("Save Local Default Partners", key="-SAVE_DEFAULT_PARTNERS-", button_color=("white", "green")), sg.Text("", key="-SAVE_STATUS-", text_color="white", background_color="dark green", font=("Helvetica", 12, "bold"), pad=(10, 5))]
 
     invoice_frame = [sg.Frame("Invoice Details", [
                 business_partners
@@ -110,15 +130,16 @@ def build_layout() -> list:
     common_frame = [sg.Frame("Common", [
                 common_business_partners
             ], font=("Helvetica", 13))]
+    
+    save_section = save_default_partners
 
-    business_partners_tab = [ common_frame, invoice_frame, order_frame ]
+    business_partners_tab = [ common_frame, invoice_frame, order_frame, save_section ]
 
     main_layout = [[sg.TabGroup([[  sg.Tab('Main Details', main_screen),
                                sg.Tab('Business Partners', business_partners_tab)]])]]
                                
     main_layout[-1].append(sg.Sizegrip())
     return main_layout
-
 
 def _unique_path(path: Path) -> Path:
     if not path.exists():
@@ -143,14 +164,20 @@ class App:
     def run(self) -> None:
         while True:
             event, values = self.window.read()
-            if event in (sg.WINDOW_CLOSED, "-QUIT-"):
-                break
-            if event == "-BROWSE-" or event == "-FOLDER-":
-                folder = values.get("-FOLDER-")
-                if folder:
-                    _save_last_folder(folder)
-            if event == "-GENERATE-":
-                self._on_generate(values)
+            
+            match event:
+                case sg.WINDOW_CLOSED | "-QUIT-":
+                    break
+                case "-BROWSE-" | "-FOLDER-":
+                    folder = values.get("-FOLDER-")
+                    if folder:
+                        _save_last_folder(folder)
+                case "-GENERATE-":
+                    self._on_generate(values)
+                case "-SAVE_DEFAULT_PARTNERS-":
+                    values = {k: self.window[k].get() for k in (self._PARTNER_KEYS)}
+                    _save_default_partners(values)
+                    self.window["-SAVE_STATUS-"].update("Saved!")
             self._recalc(values)
         self.window.close()
 
