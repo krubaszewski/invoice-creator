@@ -50,7 +50,7 @@ def _load_default_partners(field: str, default: str = "") -> str:
     except Exception:
         pass
     return default
-    
+     
 def build_layout() -> list:
     last_folder = _load_last_folder()
 
@@ -157,7 +157,7 @@ def _unique_path(path: Path) -> Path:
 
 class App:
     def __init__(self) -> None:
-        self.window = sg.Window(WINDOW_TITLE, build_layout(), finalize=True, size=(720, 435), resizable=True)
+        self.window = sg.Window(WINDOW_TITLE, build_layout(), finalize=True, size=(720, 459), resizable=True)
         self.window.refresh()
         self._recalc()
 
@@ -288,3 +288,7 @@ class App:
             self.window["-OUTPUT-"].update(msg)
         except Exception as exc:
             self.window["-OUTPUT-"].update(f"ERROR: {exc}")
+
+if __name__ == "__main__":
+    app = App()
+    app.run()

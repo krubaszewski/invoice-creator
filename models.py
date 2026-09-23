@@ -28,7 +28,7 @@ ACCOUNT_EUR = "14109000047954000000046296"
 SERVICE_NAME = "Usługa transportowa"
 UNIT_NAME = "Fracht"
 
-INVOICE_FOOTER_NUM = "Nasz numer: ZK 00432/07/2024 Zlecenie: 043188PIŃCZÓW/S/2024"
+INVOICE_FOOTER_NUM = "Zlecenie:"
 INVOICE_FOOTER_SHIP = "Załadunek: FR 62330 Isbergues(2024-07-30)  Rozładunek: PL 41-103 Siemianowice Śląskie(2024-08-05)"
 
 # ZLECENIE

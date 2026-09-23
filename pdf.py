@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from fpdf import FPDF
 from models import (
     FONT_DIR, CITY,
@@ -30,17 +31,27 @@ def _text(pdf, x, y, txt, style="", size=10, align="L"):
     pdf.cell(0, 0, str(txt), align=align)
 
 
+def _text_wrapped(pdf, x, y, txt, style="", size=10, threshold=40):
+    pdf.set_font(FONT, style, size)
+    lines = max(1, math.ceil(len(txt) / threshold))
+    line_height = size * 1.5
+    for i, line in enumerate([txt[j:j + threshold] for j in range(0, len(txt), threshold)]):
+        pdf.set_xy(x, y + i * line_height)
+        pdf.cell(0, 0, str(line))
+    return y + (lines - 1) * line_height
+
+
 # ── Adjusted Table Grid ──
 COLS = [
     ("Lp", 30, 20, "C"),
-    ("Nazwa wyrobu, usługi", 50, 100, "L"),  # Slightly reduced
-    ("Jm", 150, 40, "C"),                    # Expanded
+    ("Nazwa wyrobu, usługi", 50, 100, "L"),
+    ("Jm", 150, 40, "C"),
     ("Ilość", 190, 30, "C"),                 
     ("Cena netto", 220, 75, "R"),            
-    ("Wartość netto", 295, 75, "R"),         # Adjusted to balance
-    ("VAT %", 370, 40, "C"),                 # Expanded
+    ("Wartość netto", 295, 75, "R"),
+    ("VAT %", 370, 40, "C"),
     ("VAT", 410, 65, "R"),                   
-    ("Wartość brutto", 475, 90, "R"),        # Adjusted to balance
+    ("Wartość brutto", 475, 90, "R"),
 ]
 
 
@@ -69,32 +80,41 @@ def generate_invoice(data, path: str) -> str:
     _text(pdf, 0, 116, f"Numer KSEF: {ksef_number}", size=10, align="C")
 
     # Sprzedawca / Nabywca Table
-    pdf.rect(30, 125, 267.5, 15)   
-    pdf.rect(297.5, 125, 267.5, 15) 
-    pdf.rect(30, 140, 267.5, 50)   
-    pdf.rect(297.5, 140, 267.5, 50) 
+    pdf.rect(30, 125, 267.5, 15)
+    pdf.rect(297.5, 125, 267.5, 15)
+    seller_lines = max(1, math.ceil(len(data.seller_name) / 40))
+    buyer_lines = max(1, math.ceil(len(data.buyer_name) / 40))
+    seller_box_h = max(50, seller_lines * 13.5 + 14 + 12 + 12)
+    buyer_box_h = max(50, buyer_lines * 13.5 + 14 + 12 + 12)
+    box_top = 140
+
+    pdf.rect(30, box_top, 267.5, seller_box_h)
+    pdf.rect(297.5, box_top, 267.5, buyer_box_h)
 
     _text(pdf, 35, 135, "Sprzedawca:", style="B", size=9)
     _text(pdf, 302.5, 135, "Nabywca:", style="B", size=9)
 
-    _text(pdf, 35, 152, data.seller_name, style="B", size=9)
-    _text(pdf, 35, 166, f"Adres: {data.seller_address}, {data.seller_postal}", size=8.5)
-    _text(pdf, 35, 180, f"NIP: {data.seller_nip}", size=8.5)
+    seller_name_y = _text_wrapped(pdf, 35, 152, data.seller_name, style="B", size=9, threshold=40)
+    _text(pdf, 35, seller_name_y + 14, f"Adres: {data.seller_address}, {data.seller_postal}", size=8.5)
+    _text(pdf, 35, seller_name_y + 28, f"NIP: {data.seller_nip}", size=8.5)
 
-    _text(pdf, 302.5, 152, data.buyer_name, style="B", size=9)
-    _text(pdf, 302.5, 166, f"Adres: {data.buyer_address}, {data.buyer_postal}", size=8.5)
-    _text(pdf, 302.5, 180, f"NIP: {data.buyer_nip}", size=8.5)
+    buyer_name_y = _text_wrapped(pdf, 302.5, 152, data.buyer_name, style="B", size=9, threshold=40)
+    _text(pdf, 302.5, buyer_name_y + 14, f"Adres: {data.buyer_address}, {data.buyer_postal}", size=8.5)
+    _text(pdf, 302.5, buyer_name_y + 28, f"NIP: {data.buyer_nip}", size=8.5)
+
+    # Content starts below the tallest name block
+    content_y = max(seller_name_y, buyer_name_y) + 28 + 20
 
     # Detail rows
-    _detail(pdf, 210, "Data dostawy towaru / wykonania usługi:", data.date_iso)
-    _detail(pdf, 225, "Termin płatności:", deadline.isoformat())
-    _detail(pdf, 240, "Sposób zapłaty:", f"Przelew {data.days} dni")
-    _detail(pdf, 255, "Nazwa banku:", BANK_NAME)
-    _detail(pdf, 270, "Numer rachunku PLN:", ACCOUNT_PLN)
-    _detail(pdf, 285, "Numer rachunku EUR:", ACCOUNT_EUR)
+    _detail(pdf, content_y, "Data dostawy towaru / wykonania usługi:", data.date_iso)
+    _detail(pdf, content_y + 15, "Termin płatności:", deadline.isoformat())
+    _detail(pdf, content_y + 30, "Sposób zapłaty:", f"Przelew {data.days} dni")
+    _detail(pdf, content_y + 45, "Nazwa banku:", BANK_NAME)
+    _detail(pdf, content_y + 60, "Numer rachunku PLN:", ACCOUNT_PLN)
+    _detail(pdf, content_y + 75, "Numer rachunku EUR:", ACCOUNT_EUR)
 
     # Main Items Table
-    table_y = 310
+    table_y = content_y + 100
     row_h = 18
 
     # Header Row
@@ -158,7 +178,7 @@ def generate_invoice(data, path: str) -> str:
     footer_y = summary_y + 35
     pdf.set_font(FONT, "", 8.5)
     pdf.set_xy(30, footer_y)
-    pdf.multi_cell(535, 11, INVOICE_FOOTER_NUM)
+    pdf.multi_cell(535, 11, f"{INVOICE_FOOTER_NUM} ZL_{number}")
     pdf.set_xy(30, pdf.y + 2)
     pdf.multi_cell(535, 11, INVOICE_FOOTER_SHIP)
 
@@ -201,46 +221,57 @@ def generate_order(data, path: str) -> str:
     _text(pdf, x_right + 5, 59, "Sprzedawca", style="B", size=9)
 
     # Row 2 (Company Details)
-    pdf.rect(x_left, 65, w_box, 45)
-    pdf.rect(x_right, 65, w_box, 45)
+    seller_lines = max(1, math.ceil(len(data.order_seller_name) / 45))
+    buyer_lines = max(1, math.ceil(len(data.order_buyer_name) / 45))
+    seller_box_h = max(45, seller_lines * 12 + 14 + 12 + 10)
+    buyer_box_h = max(45, buyer_lines * 12 + 14 + 12 + 10)
+    row2_top = 65
+    row3_top = row2_top + seller_box_h + 5  # gap between boxes and row 3
 
-    _text(pdf, x_left + 5, 75, data.order_seller_name, style="B", size=8)
-    _text(pdf, x_left + 5, 87, f"{data.seller_address}, {data.order_seller_postal}", size=8)
-    _text(pdf, x_left + 5, 99, f"NIP: {data.seller_nip_stripped}", size=8)
-    _text(pdf, x_left + 120, 99, f"VAT Eu: {data.seller_nip}", size=8)
+    pdf.rect(x_left, row2_top, w_box, seller_box_h)
+    pdf.rect(x_right, row2_top, w_box, buyer_box_h)
 
-    _text(pdf, x_right + 5, 75, data.order_buyer_name, style="B", size=8)
-    _text(pdf, x_right + 5, 87, f"{data.buyer_address}, {data.order_buyer_postal}", size=8)
-    _text(pdf, x_right + 5, 99, f"NIP: {data.buyer_nip_stripped}", size=8)
-    _text(pdf, x_right + 120, 99, f"VAT Eu: {data.buyer_nip}", size=8)
+    seller_name_y = _text_wrapped(pdf, x_left + 5, 75, data.order_seller_name, style="B", size=8, threshold=45)
+    _text(pdf, x_left + 5, seller_name_y + 12, f"{data.seller_address}, {data.order_seller_postal}", size=8)
+    _text(pdf, x_left + 5, seller_name_y + 24, f"NIP: {data.seller_nip_stripped}", size=8)
+    _text(pdf, x_left + 120, seller_name_y + 24, f"VAT Eu: {data.seller_nip}", size=8)
+
+    buyer_name_y = _text_wrapped(pdf, x_right + 5, 75, data.order_buyer_name, style="B", size=8, threshold=45)
+    _text(pdf, x_right + 5, buyer_name_y + 12, f"{data.buyer_address}, {data.order_buyer_postal}", size=8)
+    _text(pdf, x_right + 5, buyer_name_y + 24, f"NIP: {data.buyer_nip_stripped}", size=8)
+    _text(pdf, x_right + 120, buyer_name_y + 24, f"VAT Eu: {data.buyer_nip}", size=8)
 
     # Row 3 (Employee Name)
-    pdf.rect(x_left, 110, w_box, 15)
-    pdf.rect(x_right, 110, w_box, 15)
-    _text(pdf, x_left + 5, 119, Z_PERSON, style="B", size=8)
+    pdf.rect(x_left, row3_top, w_box, 15)
+    pdf.rect(x_right, row3_top, w_box, 15)
+    _text(pdf, x_left + 5, row3_top + 9, Z_PERSON, style="B", size=8)
 
     # Row 4 (Contact Info)
-    pdf.rect(x_left, 125, w_box, 45)
-    pdf.rect(x_right, 125, w_box, 45)
-    
+    row4_top = row3_top + 15
+    pdf.rect(x_left, row4_top, w_box, 45)
+    pdf.rect(x_right, row4_top, w_box, 45)
+
     labels = ["Telefon:", "Telefon komórkowy:", "Fax:", "E-mail:"]
     for i, lbl in enumerate(labels):
-        _text(pdf, x_left + 5, 135 + (i * 10), lbl, size=8)
-        _text(pdf, x_right + 5, 135 + (i * 10), lbl, size=8)
+        _text(pdf, x_left + 5, row4_top + 10 + (i * 10), lbl, size=8)
+        _text(pdf, x_right + 5, row4_top + 10 + (i * 10), lbl, size=8)
+
+    # Content below the contact info boxes
+    order_content_y = row4_top + 45 + 20
 
     # Centered Order Number
-    _text(pdf, 0, 200, "Zlecenie transportowe numer:", style="B", size=13, align="C")
-    _text(pdf, 0, 215, number, style="B", size=13, align="C")
+    _text(pdf, 0, order_content_y, "Zlecenie transportowe numer:", style="B", size=13, align="C")
+    _text(pdf, 0, order_content_y + 15, f"ZL_{number}", style="B", size=13, align="C")
 
     # Route Header
-    _text(pdf, 30, 245, "dane dotyczące trasy (załadunki, rozładunki):", size=8)
+    _text(pdf, 30, order_content_y + 32, "dane dotyczące trasy (załadunki, rozładunki):", size=8)
 
     # Załadunek / Rozładunek Tables
-    _draw_point(pdf, 255, "Załadunek 1", Z_LOAD_DATE, Z_LOAD_COMPANY, Z_LOAD_ADDR, Z_LOAD_GOODS, Z_LOAD_PALLET, Z_LOAD_ADR)
-    _draw_point(pdf, 355, "Rozładunek 1", Z_UNLOAD_DATE, Z_UNLOAD_COMPANY, Z_UNLOAD_ADDR, Z_UNLOAD_GOODS, Z_UNLOAD_PALLET, Z_UNLOAD_ADR)
+    _draw_point(pdf, order_content_y + 50, "Załadunek 1", Z_LOAD_DATE, Z_LOAD_COMPANY, Z_LOAD_ADDR, Z_LOAD_GOODS, Z_LOAD_PALLET, Z_LOAD_ADR)
+    _draw_point(pdf, order_content_y + 50 + 98 + 2, "Rozładunek 1", Z_UNLOAD_DATE, Z_UNLOAD_COMPANY, Z_UNLOAD_ADDR, Z_UNLOAD_GOODS, Z_UNLOAD_PALLET, Z_UNLOAD_ADR)
 
     # Driver & Truck Info
-    y_info = 470
+    y_info = order_content_y + 50 + 98 + 2 + 98 + 20
     _text(pdf, 30, y_info, "Ciągnik:", style="B", size=8)
     _text(pdf, 110, y_info, Z_TRUCK, size=8)
     
@@ -260,18 +291,18 @@ def generate_order(data, path: str) -> str:
     _text(pdf, 370, y_info + 30, Z_ID_DOC, size=8)
 
     # Payment & Freight
-    y_pay = 525
+    y_pay = order_content_y + 50 + 98 + 2 + 98 + 20 + 60
     _text(pdf, 30, y_pay, "Termin płatności:", style="B", size=9)
     _text(pdf, 120, y_pay, Z_PAYMENT_TERM_TEXT, size=9)
     _text(pdf, 380, y_pay, "Fracht (netto):", style="B", size=10)
     _text(pdf, 465, y_pay, Z_FREIGHT, size=10)
 
     # Bottom Address & Terms
-    y_cor = 555
+    y_cor = order_content_y + 50 + 98 + 2 + 98 + 20 + 60 + 35
     _text(pdf, 30, y_cor, "ADRES DO KORESPONDENCJI:", style="B", size=10)
     _text(pdf, 30, y_cor + 15, Z_ADDRESS_CORRESP, size=10)
 
-    y_war = 595
+    y_war = order_content_y + 50 + 98 + 2 + 98 + 20 + 60 + 35 + 30
     _text(pdf, 30, y_war, "WARUNKI PŁATNOŚCI", style="B", size=11)
     _text(pdf, 30, y_war + 15, "Kwota netto płatna w PLN według kursu średniego ogłoszonego przez NBP z dnia załadunku.", size=9)
 
