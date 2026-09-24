@@ -3,3 +3,10 @@ fpdf2==2.8.8
 pymupdf==1.28.2
 python-docx==1.2.1
 pillow==12.3.0
+weasyprint
+cssselect2
+tinycss2
+pyphen
+lxml
+reportlab
+pydyf
