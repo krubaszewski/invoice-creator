@@ -44,4 +44,4 @@ jobs:
 
       - name: List build output
         run: |
-          dir dist\invoice_creator\ /s /b
+          Get-ChildItem dist\invoice_creator\ -Recurse | Select-Object -ExpandProperty FullName
