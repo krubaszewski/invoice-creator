@@ -1,0 +1,47 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          venv\Scripts\python.exe -m pip install --upgrade pip
+          venv\Scripts\python.exe -m pip install -r requirements.txt
+          venv\Scripts\python.exe -m pip install pyinstaller
+
+      - name: Clean previous builds
+        run: |
+          Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+
+      - name: Build with PyInstaller
+        run: |
+          venv\Scripts\pyinstaller.exe invoice_creator.spec --noconfirm
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoice-creator-windows
+          path: dist/invoice_creator/
+          retention-days: 30
+
+      - name: List build output
+        run: |
+          dir dist\invoice_creator\ /s /b
