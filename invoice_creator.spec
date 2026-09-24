@@ -66,4 +66,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=_icon,
+    onefile=False,
 )
